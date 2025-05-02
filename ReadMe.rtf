@@ -1,108 +1,100 @@
-{\rtf1\ansi\ansicpg1252\cocoartf2513
-\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
-{\colortbl;\red255\green255\blue255;}
-{\*\expandedcolortbl;;}
-\margl1440\margr1440\vieww15240\viewh25440\viewkind0
-\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
 
-\f0\fs24 \cf0 \
-May 2025:	DOS/65 Version 3.21 Installation notes\
-\
- The 65C02 system used for this installation is connected via USB to a host system using a FTDI Serial (Async) to USB converter.The console is the first serial port of a NXP SC28L92 DUART. A terminal program is required on the host computer to communicate to the 65C02 system. For MacOS, the terminal program \'93Serial\'94 can be used, which supports Xmodem protocol. This is required to load the system and get DOS/65 running. For a Windows based host machine, ExtraPutty has been used and works fine. Serial settings should be set for 1152.kbps, no parity, 8-data bits, one stop bit and RTS/CTS handshaking.\
-\
- Note that the hardware used is still a prototype system!\
-\
- There are two directory structures provided:\
- 1. C02Monitor5\
- 2. DOS65V321\
-\
- The C02Monitor5 directory contains the source and assembled files necessary to create an EEPROM for the modified C02 Pocket SBC running at 3.3 volts. There are two files, one for the BIOS and one for the Monitor. Both files are assembled and linked creating a .S19 record file. This is loaded into the EEPROM at the correct offset when programming the EEPROM.\
-\
-The modified 65C02 system provides:\
-\
-- 60KB of contiguous RAM\
-- 4KB of contiguous EEPROM (upper 4KB)\
-- I/O address space at $FE00 for 64 contiguous bytes\
-\
-NXP SC28L92 DUART\
-Maxim DS1813 RTC (32-bit counter) (not used by DOS/65 as of yet)\
-IBM/Hitachi Microdrive with 35-pin PATA interface\
-\
- Note that my GitHub page shows the basic schematic for the hardware used under:\
- - C02 Pocket SBC 2.5\
-\
- Once loaded, the C02 Pocket prototype should boot and show the BIOS messages and detection of the RTC and IDE devices. It will default to the limited function Monitor. It will also read the first logical block from the IDE and scan it for a proper partition record, although this is not currently being used for a bootable system. It will show an error for an invalid Partition Record however, as none is loaded.\
-\
- Once you have a working machine, you can use the Monitor\'92s Xmodem-CRC loader, which is executed by a Ctrl-L from the Monitor prompt to load the MB Utility and the DOS/65 images into RAM. Each file is loaded separately using the Ctrl-L command. When these are loaded, the MD Util will load to $0800 and the DOS/65 image will load to $D000.\
-\
- Once loaded, type: g 800 <enter> which will launch the MD Util program.\
-\
- Use the \'93S\'94 command to load the system to the Microdrive by entering the following:\
-\
- 1. LBA to load the image to: 131072\
- 2. Memory Address the image is located at: D000\
- 3. Number of blocks to write: 16\
-\
- Answer \'93Y\'94 to the prompt to continue.\
-\
- NOTE: The above LBA image load location was picked by me with no real reason behind it. The starting LBA on the Microdrive is coded into the C02BIOS, so if you decide to change the location of DOS/65 on the drive, make sure you update the BIOS and also the drive tables in SIM, otherwise you won\'92t have a bootable system.\
-\
- Once completed, you can simply enter \'93Q\'94 for quit, which will exit to the monitor, which will show a BRK detected, as DOS/65 is not yet loaded. Now that you\'92re back to the Monitor, enter a Crtl-Z and confirm with a \'93Y\'94 to clear the RAM and reboot the system.\
-\
- You can now enter a Ctri-B to load DOS/65 from the Microdrive and execute it.\
-\
- Once you have the default A0> prompt, clear out the drives by erasing them. This builds the directory structure for each of the 8 drives:\
-\
- era a:*.* <enter>\
-\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
-\cf0  era b:*.* <enter>\
- era c:*.* <enter>\
- era d:*.* <enter>\
- era e:*.* <enter>\
- era f:*.* <enter>\
- era g:*.* <enter>\
- era h:*.* <enter>\
-\
- You now have a bare installation of DOS/65 running with access to 8- 8MB drives. However there are no applications installed yet. This procedure should take less than 5 minutes to load up, write to the disk and be up in running. There\'92s NO sysgen used here\'85 as the standard DOS/65 assembler only supports the original NMOS CPU. DOS/65 CCM, PEM and SIM requires a CMOS CPU\'85 and all of my designs use the currently available WDC W65C02S processor. Also note that assembling and linking DOS/65 on the host machine takes a couple seconds to complete.\
-\
- You need to exit DOS/65 back to the Monitor to load the Xmodem utility. To do this, from the DOS prompt, enter: go 61440 <enter>\
-\
- Once at the Monitor prompt, enter a Ctrl-Z to clear memory and reboot the system. From there, you can use a Ctrl-L and load the XBSC123.S19 file from the Xmodem directory. Once loaded, enter DOS/65 by entering a Ctrl-B. Once in DOS/65, use the \'93save\'94 command as:\
-\
- save 14 xmodem.com <enter>\
-\
- This will save the Xmodem utility to the default drive A:.\
-\
-You can also load the Super Directory (SD) program the same way as Xmodem, but the number of pages to save should be changed to 7;\
-\
- save 7 sd.com <enter>\
-\
- From this point forward, you can use the Xmodem utility to load all of the base utilities in the Utils directory by issuing the following:\
-\
- xmodem rq name, com <enter>\
-\
-There are 15 base utilities that you should load to the A: drive which will provide a full functioning system. The Util_Source directory contains all of the source files for these system utilities, which can be assembled directly on the DOS/65 system. I suggest loading these on to the B: drive using the Xmodem utility. Once completed, you can download the makeutil.sub file to the A: drive. By using the SUBMIT utility, you can directly build the entire set of DOS/65 utilities on the DOS/65 system.\
-\
- submit makeutil <enter>\
-\
- With an 8MHz CPU, this entire build takes about 386 seconds.\
-\
- Note that there are source files for a partition record and a boot record. The partition record does work as is\'85 and can be loaded to the disk using the MD util program, outside of DOS/65. Note that you\'92ll need to load the MD Util program from the Monitor using Ctril-L and the same for the partition load providing an offset to load the partition record at a higher address that doesn\'92t conflict with the space used by MD Util. Once loaded, you can enter MD util by entering g 0800 then use the S command to write the partition record to LBA 0.\
-\
- The Boot record code is not yet completed, so it doesn\'92t work just yet. Also note that the C02 BIOS can be configured to automatically boot from the IDE device, provided the Partition Record is loaded and configured properly\'85 and that a working Boot Record exists (work in progress). Once the Boot Record is finished, I\'92ll update the MD Util program to allow creating a bootable drive which will configure and write the Partition Record, Boot Record and the DOS/65 bootable image. Until that time, the above procedure provides a fully working DOS/65 system.\
-\
-********************************\
-\
- Note that the DOS/65 code can be implemented on any 65C02 system having sufficient memory, compatible hardware (DUART and a block storage device) and a compatible BIOS. By examining the BIOS and Monitor source code,  you should be able to modify it for your specific system.\
-\
- Note that I used WDC Tools for all of the DOS/65 source code (CCM/PEM/SIM) as well as the C02 BIOS and Monitor\'85 AND the Super Directory (SD) and Xmodem utilities. The default output from the Linker is a Motorola S19 record, which the Monitor \'93automagically\'94 senses and loads into memory at the correct address.\
-\
- Final Note:\
- - My sincere thanks and appreciation to Richard Leary for writing DOS/65 initially and updating it to a version 3 release. I\'92ve made extensive changes to his original CCM and PEM modules using CMOS instructions and addressing modes. The SIM module is an entirely new module written by me. Note that Richard\'92s utilities are all unchanged, sans the SD utility for using the new record based access,  which replaced the Track/Sector access. Also slightly modified is the SYST213S.BAS Basic file which shows the system status and drive details\'85 also to reflect the new Record Based access.\
-\
- I hope others find this version of DOS/65 useful and relatively easy to implement on other 65C02 based systems. I\'92ve put in a large amount of time to make such extensive changes to CCM and PEM and write a new SIM module along with the BIOS for my 65C02 system. It\'92s been a lot of fun and has been one of those side hobby projects that keeps my mind active as I\'92m an old retired guy now. Above all else, have fun with your 65C02 based projects!\
-\
- Regards, KM (Kevin Maier)\
-\
-PS - don\'92t forget to read the PDF file  (DOS 65 Update 2025) for more insight on version 3.21.\
- }
+May 2025:	DOS/65 Version 3.21 Installation notes
+
+ The 65C02 system used for this installation is connected via USB to a host system using a FTDI Serial (Async) to USB converter.The console is the first serial port of a NXP SC28L92 DUART. A terminal program is required on the host computer to communicate to the 65C02 system. For MacOS, the terminal program “Serial” can be used, which supports Xmodem protocol. This is required to load the system and get DOS/65 running. For a Windows based host machine, ExtraPutty has been used and works fine. Serial settings should be set for 1152.kbps, no parity, 8-data bits, one stop bit and RTS/CTS handshaking.
+
+ Note that the hardware used is still a prototype system!
+
+ There are two directory structures provided:
+ 1. C02Monitor5
+ 2. DOS65V321
+
+ The C02Monitor5 directory contains the source and assembled files necessary to create an EEPROM for the modified C02 Pocket SBC running at 3.3 volts. There are two files, one for the BIOS and one for the Monitor. Both files are assembled and linked creating a .S19 record file. This is loaded into the EEPROM at the correct offset when programming the EEPROM.
+
+The modified 65C02 system provides:
+
+- 60KB of contiguous RAM
+- 4KB of contiguous EEPROM (upper 4KB)
+- I/O address space at $FE00 for 64 contiguous bytes
+
+NXP SC28L92 DUART
+Maxim DS1813 RTC (32-bit counter) (not used by DOS/65 as of yet)
+IBM/Hitachi Microdrive with 35-pin PATA interface
+
+ Note that my GitHub page shows the basic schematic for the hardware used under:
+ - C02 Pocket SBC 2.5
+
+ Once loaded, the C02 Pocket prototype should boot and show the BIOS messages and detection of the RTC and IDE devices. It will default to the limited function Monitor. It will also read the first logical block from the IDE and scan it for a proper partition record, although this is not currently being used for a bootable system. It will show an error for an invalid Partition Record however, as none is loaded.
+
+ Once you have a working machine, you can use the Monitor’s Xmodem-CRC loader, which is executed by a Ctrl-L from the Monitor prompt to load the MB Utility and the DOS/65 images into RAM. Each file is loaded separately using the Ctrl-L command. When these are loaded, the MD Util will load to $0800 and the DOS/65 image will load to $D000.
+
+ Once loaded, type: g 800 <enter> which will launch the MD Util program.
+
+ Use the “S” command to load the system to the Microdrive by entering the following:
+
+ 1. LBA to load the image to: 131072
+ 2. Memory Address the image is located at: D000
+ 3. Number of blocks to write: 16
+
+ Answer “Y” to the prompt to continue.
+
+ NOTE: The above LBA image load location was picked by me with no real reason behind it. The starting LBA on the Microdrive is coded into the C02BIOS, so if you decide to change the location of DOS/65 on the drive, make sure you update the BIOS and also the drive tables in SIM, otherwise you won’t have a bootable system.
+
+ Once completed, you can simply enter “Q” for quit, which will exit to the monitor, which will show a BRK detected, as DOS/65 is not yet loaded. Now that you’re back to the Monitor, enter a Crtl-Z and confirm with a “Y” to clear the RAM and reboot the system.
+
+ You can now enter a Ctri-B to load DOS/65 from the Microdrive and execute it.
+
+ Once you have the default A0> prompt, clear out the drives by erasing them. This builds the directory structure for each of the 8 drives:
+
+ era a:*.* <enter>
+ era b:*.* <enter>
+ era c:*.* <enter>
+ era d:*.* <enter>
+ era e:*.* <enter>
+ era f:*.* <enter>
+ era g:*.* <enter>
+ era h:*.* <enter>
+
+ You now have a bare installation of DOS/65 running with access to 8- 8MB drives. However there are no applications installed yet. This procedure should take less than 5 minutes to load up, write to the disk and be up in running. There’s NO sysgen used here… as the standard DOS/65 assembler only supports the original NMOS CPU. DOS/65 CCM, PEM and SIM requires a CMOS CPU… and all of my designs use the currently available WDC W65C02S processor. Also note that assembling and linking DOS/65 on the host machine takes a couple seconds to complete.
+
+ You need to exit DOS/65 back to the Monitor to load the Xmodem utility. To do this, from the DOS prompt, enter: go 61440 <enter>
+
+ Once at the Monitor prompt, enter a Ctrl-Z to clear memory and reboot the system. From there, you can use a Ctrl-L and load the XBSC123.S19 file from the Xmodem directory. Once loaded, enter DOS/65 by entering a Ctrl-B. Once in DOS/65, use the “save” command as:
+
+ save 14 xmodem.com <enter>
+
+ This will save the Xmodem utility to the default drive A:.
+
+You can also load the Super Directory (SD) program the same way as Xmodem, but the number of pages to save should be changed to 7;
+
+ save 7 sd.com <enter>
+
+ From this point forward, you can use the Xmodem utility to load all of the base utilities in the Utils directory by issuing the following:
+
+ xmodem rq name, com <enter>
+
+There are 15 base utilities that you should load to the A: drive which will provide a full functioning system. The Util_Source directory contains all of the source files for these system utilities, which can be assembled directly on the DOS/65 system. I suggest loading these on to the B: drive using the Xmodem utility. Once completed, you can download the makeutil.sub file to the A: drive. By using the SUBMIT utility, you can directly build the entire set of DOS/65 utilities on the DOS/65 system.
+
+ submit makeutil <enter>
+
+ With an 8MHz CPU, this entire build takes about 386 seconds.
+
+ Note that there are source files for a partition record and a boot record. The partition record does work as is… and can be loaded to the disk using the MD util program, outside of DOS/65. Note that you’ll need to load the MD Util program from the Monitor using Ctril-L and the same for the partition load providing an offset to load the partition record at a higher address that doesn’t conflict with the space used by MD Util. Once loaded, you can enter MD util by entering g 0800 then use the S command to write the partition record to LBA 0.
+
+ The Boot record code is not yet completed, so it doesn’t work just yet. Also note that the C02 BIOS can be configured to automatically boot from the IDE device, provided the Partition Record is loaded and configured properly… and that a working Boot Record exists (work in progress). Once the Boot Record is finished, I’ll update the MD Util program to allow creating a bootable drive which will configure and write the Partition Record, Boot Record and the DOS/65 bootable image. Until that time, the above procedure provides a fully working DOS/65 system.
+
+********************************
+
+ Note that the DOS/65 code can be implemented on any 65C02 system having sufficient memory, compatible hardware (DUART and a block storage device) and a compatible BIOS. By examining the BIOS and Monitor source code,  you should be able to modify it for your specific system.
+
+ Note that I used WDC Tools for all of the DOS/65 source code (CCM/PEM/SIM) as well as the C02 BIOS and Monitor… AND the Super Directory (SD) and Xmodem utilities. The default output from the Linker is a Motorola S19 record, which the Monitor “automagically” senses and loads into memory at the correct address.
+
+ Final Note:
+ - My sincere thanks and appreciation to Richard Leary for writing DOS/65 initially and updating it to a version 3 release. I’ve made extensive changes to his original CCM and PEM modules using CMOS instructions and addressing modes. The SIM module is an entirely new module written by me. Note that Richard’s utilities are all unchanged, sans the SD utility for using the new record based access,  which replaced the Track/Sector access. Also slightly modified is the SYST213S.BAS Basic file which shows the system status and drive details… also to reflect the new Record Based access.
+
+ I hope others find this version of DOS/65 useful and relatively easy to implement on other 65C02 based systems. I’ve put in a large amount of time to make such extensive changes to CCM and PEM and write a new SIM module along with the BIOS for my 65C02 system. It’s been a lot of fun and has been one of those side hobby projects that keeps my mind active as I’m an old retired guy now. Above all else, have fun with your 65C02 based projects!
+
+ Regards, KM (Kevin Maier)
+
+PS - don’t forget to read the PDF file  (DOS 65 Update 2025) for more insight on version 3.21.
+ 
