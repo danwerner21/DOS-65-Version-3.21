@@ -1,0 +1,452 @@
+  Fri Apr 11 2025  6:42                                                                                                    Page 1
+
+
+                                               ***************************************
+                                               **      WDC 65C02 Macro Assembler    **
+                                               **                                   **
+                                               **     Version 3.49.1- Feb  6 2006    **
+                                               ***************************************
+
+     1                        ;**************************************************************************************************
+     2                        ;*                                                                                                *
+     3                        ;*                        Microdrive Partition Block for Booting an OS                            *
+     4                        ;*                                                                                                *
+     5                        ;*                                                                                                *
+     6                        ;*                                  10/04/2025 (Day/Month/Year)                                   *
+     7                        ;*                                                                                                *
+     8                        ;*                                    Copyright Kevin Maier                                       *
+     9                        ;*                                                                                                *
+    10                        ;*                                     GNU GPL V3 License                                         *
+    11                        ;*                                                                                                *
+    12                        ;**************************************************************************************************
+    13                        ; Partition Block 1.01                                                                            *
+    14                        ; - Initial Partition Block format for enabling a boot from the Microdrive.                       *
+    15                        ; - Based on the  Ontrack Disk Manager Partition Table, but with 65C02 boot software.             *
+    16                        ;                                                                                                 *
+    17                        ;**************************************************************************************************
+    18                                PL      66      ;Page Length
+    19                                PW      132     ;Page Width (# of char/line)
+    20                                CHIP    W65C02S ;Enable WDC 65C02 instructions
+    21                                PASS1   OFF     ;Set ON for debugging
+    22                                INCLIST ON      ;Set ON for listing Include files
+    23                        ;**************************************************************************************************
+    24                         ;Include required constants/equates/tables to assemble
+    25                        ;
+    29                                LIST                                    ;Turn List function back on
+    30                        ;
+    31                        ;**************************************************************************************************
+    32                        ;
+    33                        ; Note that the ORG statement below is bogus, it just marks the starting offset of the block
+    34                        ; - The BIOS/Monitor will load the Partition Record into low memory first, from LBA 0.
+    35                        ;       - The block is tested for the signature at offset 253 for $0265 (6502 as a Hex word)
+    36                        ;       - If this siganture test passes, the BIOS/Monitor will jump to the start of the LBA load
+    37                        ;       - If the signature test fails, the BIOS/Monitor posts an error and warm boots the Monitor
+    38                        ;
+    39                        ; Once control is passed here (partition record loaded), the following sequence happens:
+    40                        ;       - Sends an "*" to the console to show it's loaded and has execution
+    41                        ;       - Checks the stack to figure out where itself has been loaded in memory
+    42                        ;       - Checks for the classic 2-byte signature at the end ($AA55)
+    43                        ;       - If that fails, en error is sent and a jump to warm boot the Monitor is done.
+    44                        ;       - If that passes, it checks the table entries looking at active table ($80 first byte)
+    45                        ;       - If that fails, an error is sent and a jump to warm boot the Monitor is done.
+    46                        ;
+    47                        ; If an active partition record is found, the following sequence happens;
+    48                        ;       - We check the starting LBA to ensure it's in the range of the BIOS (24-bit only)
+    49                        ;       - If that fails, we send an error and warm boot the Monitor
+    50                        ;       - If that passes, we load the boot record from the active partition into memory
+    51                        ;       - We chack for any BIOS error in loading the active record, warm boot Monitor if it failed
+    52                        ;       - If the active boot record loaded properly, we jump to the start of it and we're done.
+    53                        ;
+    54                                .ORG    $1000           ;Start of partition block offset - bogus, can't be $0000
+    55                        ;
+    56 00:1000: A9 2A                LDA     #'*'            ;Get an asterisk
+    57 00:1002: 20 21 FF             JSR     B_CHROUT        ;Send to the console
+    58                        ;
+    59                        ; We send an asterisk to the console first for two reasons:
+    60                        ; - it's a visual sign that the partition record was successfully loaded and executed
+  Fri Apr 11 2025  6:42                                                                                                    Page 2
+
+
+    61                        ; - we need to know where it's loaded, so we can now look at the stack and get the return address
+    62                        ;
+    63 00:1005: BA                   TSX                     ;Get stack pointer
+    64 00:1006: BD 00 01             LDA     $0100,X         ;Get return address high byte
+    65 00:1009: 85 01                STA     $01             ;Save it as a Page Zero pointer
+    66 00:100B: CA                   DEX                     ;Decrement pointer
+    67 00:100C: BD 00 01             LDA     $0100,X         ;Get return address low byte
+    68 00:100F: 85 00                STA     $00             ;Save it as a Page Zero pointer
+    69                        ;
+    70                        ; Now, subtract 4 from the 16-bit address to point to our entry address
+    71                        ;
+    72 00:1011: 38                   SEC                     ;Set carry for subtraction
+    73 00:1012: A5 00                LDA     $00             ;Get low byte address
+    74 00:1014: E9 04                SBC     #$04            ;Subtract 4
+    75 00:1016: 85 00                STA     $00             ;Store it back
+    76 00:1018: 85 02                STA     $02             ;Save it for Text Printing
+    77 00:101A: A5 01                LDA     $01             ;Get high byte address
+    78 00:101C: E9 00                SBC     #$00            ;Subtract carry flag
+    79 00:101E: 85 01                STA     $01             ;Store it back
+    80 00:1020: 85 03                STA     $03             ;Store it for Text Printing
+    81                        ;
+    82                        ; We now have the location the partition record was loaded to as a Page Zero indirect pointer
+    83                        ; - We now need to check the partition record for the correct signature. The signature is
+    84                        ; - the standard $AA55 at the end, which is on the next page.
+    85                        ; - Increment the high byte address pointer to access the second page.
+    86                        ;
+    87 00:1022: E6 01                INC     $01             ;Increment high byte address to get to second page of record
+    88 00:1024: A0 FF                LDY     #$FF            ;Load index to last byte of partition record
+    89 00:1026: B1 00                LDA     ($00),Y         ;Get signature of last byte
+    90 00:1028: C9 AA                CMP     #$AA            ;Check for correct bit pattern
+    91 00:102A: D0 6A                BNE     BAD_PART        ;Branch if not equal
+    92 00:102C: 88                   DEY                     ;Decrement index to next signature byte
+    93 00:102D: B1 00                LDA     ($00),Y         ;Get signature of next to last byte
+    94 00:102F: C9 55                CMP     #$55            ;Check for correct bit pattern
+    95 00:1031: D0 63                BNE     BAD_PART        ;Branch if not equal
+    96                        ;
+    97                        ; Partition Record has the correct signature, yay!
+    98                        ; - Now we need to scan the boot record entries to see if we have an active one
+    99                        ; - If not, we send a message to the console showing no active parition, then
+   100                        ; - we warm boot to the Monitor code.
+   101                        ;
+   102                        ; If we find an active partition, we will check the starting block address, ensure
+   103                        ; - it's within the range of our BIOS, then load the parameters and read the boot block
+   104                        ; - Once loaded, we will jump to the starting address of the boot block, we're done!
+   105                        ;
+   106 00:1033: C6 01                DEC     $01             ;Decrement back to the first page
+   107 00:1035: A2 10                LDX     #16             ;Set count for 16 Boot Records
+   108                        BOOT_REC_LP
+   109 00:1037: A0 FE                LDY     #<BOOT_RECORD   ;Get low byte offset to Boot record start
+   110 00:1039: B1 00                LDA     ($00),Y         ;Get first byte of Boot record
+   111 00:103B: 30 12                BMI     BOOT_FOUND      ;If bit 7 set, active Boot record found!
+   112 00:103D: CA                   DEX                     ;Decrement count
+   113 00:103E: F0 52                BEQ     NO_ACTIVE       ;No active Boot Record found, branch
+   114                        ;
+   115                        ; Next, add 16 to the page zero indirect address.
+   116                        ; - This is done so we can step through each of the boot records scanning for one
+   117                        ; - that is active. It's just a simple add of 16 to the pointers.
+   118                        ;
+   119 00:1040: 18                   CLC                     ;Clear carry for add
+   120 00:1041: A5 00                LDA     $00             ;Get low byte of pointer
+   121 00:1043: 69 10                ADC     #16             ;Add 16 for offset to next boot record
+   122 00:1045: 85 00                STA     $00             ;Store it back
+   123 00:1047: A5 01                LDA     $01             ;Get high byte of pointer
+  Fri Apr 11 2025  6:42                                                                                                    Page 3
+
+
+   124 00:1049: 69 00                ADC     #00             ;Add in carry
+   125 00:104B: 85 01                STA     $01             ;Store it back
+   126                        ;
+   127 00:104D: 80 E8                BRA     BOOT_REC_LP     ;Loop back for next
+   128                        ;
+   129                        BOOT_FOUND
+   130                        ; An active boot record is found! Now we need to look at the starting LBA
+   131                        ; for the active boot record. The C02BIOS only provides for 24-bit LBA addressing!
+   132                        ; As the partition record has a long word offset, if the high order byte is a
+   133                        ; non-zero value, it's out of the BIOS range and a Boot Error is shown.
+   134                        ;
+   135 00:104F: 18                   CLC                     ;Clear carry for add
+   136 00:1050: A5 00                LDA     $00             ;Get Boot record offset
+   137 00:1052: 69 FE                ADC     #$FE            ;Add offset to LBA start
+   138 00:1054: 85 00                STA     $00             ;Store it back
+   139 00:1056: A5 01                LDA     $01             ;Get high byte
+   140 00:1058: 69 00                ADC     #$00            ;Add in carry
+   141 00:105A: 85 01                STA     $01             ;store it back
+   142                        ;
+   143                        ; The start of the active partition record is now in page zero as an indirect address.
+   144                        ; Now grab the 24-bit LBA offset (3 bytes) and save to page zero. The 4th byte must
+   145                        ; be zero. If not, the partition starting LBA is beyond the BIOS access.
+   146                        ;
+   147 00:105C: A0 08                LDY     #08             ;Get offset to Boot record first LBA
+   148 00:105E: B1 00                LDA     ($00),Y         ;Get first byte
+   149 00:1060: 85 04                STA     $04             ;Store it
+   150 00:1062: C8                   INY                     ;Increment to next byte value
+   151 00:1063: B1 00                LDA     ($00),Y         ;Get second byte
+   152 00:1065: 85 05                STA     $05             ;Store it
+   153 00:1067: C8                   INY                     ;Increment to next byte value
+   154 00:1068: B1 00                LDA     ($00),Y         ;Get third byte
+   155 00:106A: 85 06                STA     $06             ;Store it
+   156 00:106C: C8                   INY                     ;Increment to next byte value
+   157 00:106D: B1 00                LDA     ($00),Y         ;Get fourth byte
+   158 00:106F: D0 1D                BNE     BOOT_ERROR      ;If not zero, out of BIOS range
+   159                        ;
+   160 00:1071: A5 04                LDA     $04             ;Set LBA number to load (24-bit)
+   161 00:1073: A4 05                LDY     $05
+   162 00:1075: A6 06                LDX     $06   
+   163 00:1077: 20 0F FF             JSR     B_IDE_SET_LBA   ;Call BIOS to Set address
+   164                        ;
+   165 00:107A: A2 01                LDX     #$01            ;Set Block count to 1
+   166 00:107C: A9 00                LDA     #<BOOT_BUFFER   ;Set low byte of BOOT Buffer
+   167 00:107E: A0 08                LDY     #>BOOT_BUFFER   ;Set high byte of BOOT buffer
+   168 00:1080: 20 12 FF             JSR     B_IDE_SET_ADDR  ;Call BIOS to set address/count
+   169                        ;
+   170 00:1083: 20 09 FF             JSR     B_IDE_READ_LBA  ;Call BIOS to read block into memory
+   171 00:1086: A5 FB                LDA     IDE_STATUS_RAM  ;Get Status from BIOS call
+   172 00:1088: 4A                   LSR     A               ;Shift error bit to carry
+   173 00:1089: B0 03                BCS     BOOT_ERROR      ;Branch if error
+   174 00:108B: 4C 00 08             JMP     BOOT_BUFFER     ;Jump to Boot record, we're done!
+   175                        ;
+   176                        BOOT_ERROR
+   177 00:108E: A9 DB                LDA     #<BAD_BLOCK     ;Get low byte offset
+   178 00:1090: 80 06                BRA     MSG_FINISH      ;Use routine below to finish message and halt
+   179                        ;
+   180                        ; We have not found any of the Boot Records to have an active flag. Therefore, we can not
+   181                        ; attempt to load a boot record and continue booting from the disk. We simply send a message
+   182                        ; to the console and go back to the Monitor via the Warm Boot entry.
+   183                        ;
+   184                        NO_ACTIVE
+   185 00:1092: A9 C3                LDA     #<NO_ACT_PART   ;Get low byte offset
+   186 00:1094: 80 02                BRA     MSG_FINISH      ;Use routine above to finish message and Monitor entry
+  Fri Apr 11 2025  6:42                                                                                                    Page 4
+
+
+   187                        ;
+   188                        ; We have a bad partition record! The two signature bytes at the end of the record are
+   189                        ; not correct. Therefore, we send a message out the to console, then halt the CPU.
+   190                        ;
+   191                        BAD_PART
+   192 00:1096: A9 AA                LDA     #<BAD_REC_MSG   ;Get low byte offset
+   193                        MSG_FINISH
+   194 00:1098: 18                   CLC                     ;Clear carry for add
+   195 00:1099: 65 02                ADC     $02             ;Add any offset from record location
+   196 00:109B: 85 02                STA     $02             ;Store it back
+   197 00:109D: A0 00                LDY     #$00            ;Zero Y index
+   198                        MSG_LOOP
+   199 00:109F: B1 02                LDA     ($02),Y         ;Get Message
+   200 00:10A1: F0 06                BEQ     HALT_CPU        ;If end of message, branch
+   201 00:10A3: 20 21 FF             JSR     B_CHROUT        ;Send to Console
+   202 00:10A6: C8                   INY                     ;Increment Index
+   203 00:10A7: 80 F6                BRA     MSG_LOOP        ;Branch back until null found
+   204                        HALT_CPU
+   205 00:10A9: CB                   WAI                     ;Halt CPU, force user interaction
+   206                        ;
+   207                        BAD_REC_MSG
+   208 00:10AA: 0D 0A 42 61          .DB     13,10,'Bad Partition Record',13,10,0  ;Bad partition record message
+       00:10AE: 64 20 50 61 
+       00:10B2: 72 74 69 74 
+       00:10B6: 69 6F 6E 20 
+       00:10BA: 52 65 63 6F 
+       00:10BE: 72 64 0D 0A 
+       00:10C2: 00 
+   209                        ;
+   210                        NO_ACT_PART
+   211 00:10C3: 0D 0A 4E 6F          .DB     13,10,'No Active Partition',13,10,0   ;No active partition message
+       00:10C7: 20 41 63 74 
+       00:10CB: 69 76 65 20 
+       00:10CF: 50 61 72 74 
+       00:10D3: 69 74 69 6F 
+       00:10D7: 6E 0D 0A 00 
+   212                        ;
+   213                        BAD_BLOCK
+   214 00:10DB: 0D 0A 42 61          .DB     13,10,'Bad Boot Block!',13,10,0 ;Bad boot block message
+       00:10DF: 64 20 42 6F 
+       00:10E3: 6F 74 20 42 
+       00:10E7: 6C 6F 63 6B 
+       00:10EB: 21 0D 0A 00 
+   215                        ;
+   216                        COPYRIGHT
+   217 00:10EF: 4B 2E 45 2E          .DB     'K.E. Maier'
+       00:10F3: 20 4D 61 69 
+       00:10F7: 65 72 
+   218                        ;
+   219                                .ORG    $10FC           ;Offset for 2-byte signature
+   220                        ;
+   221                        ; The C02BIOS will test for the following 2-byte signature!
+   222                        ; As a disk might have been attached with a typical PC (aka Intel) partition record, we don't
+   223                        ; want to attempt executing Intel code by accident.
+   224                        ;
+   225                        ; The 2-byte signature validates the partition record is for 65XX code execution. If this is
+   226                        ; not found, the C02Monitor will show an error message and warm boot itself.
+   227                        ;
+   228 00:10FC: 02 65                .DW     $6502           ;Litte-Endian signature for 6502 partition
+   229                        ;
+   230                        ;**************************************************************************************************
+   231                        ; 
+   232                        ;Partition Records are 16 bytes in length and have the following format:
+  Fri Apr 11 2025  6:42                                                                                                    Page 5
+
+
+   233                        ;
+   234                        ;       Offset          Length          Description
+   235                        ;       0x00            1 byte          Status: bit 7 used for active (1), all other bits zero
+   236                        ;       0x01            3 bytes         CHS address of first sector in partition
+   237                        ;       0x04            1 byte          Partition Type: "db" is for CPM
+   238                        ;       0x05            3 bytes         CHS addres of last sector in partition
+   239                        ;       0X08            4 bytes         LBA of first Block in partition
+   240                        ;       0x0C            4 bytes         Number of Blocks in partition
+   241                        ;
+   242                        ; note: if LBA addressing is used, both CHS fields should be zeroed out!
+   243                        ;
+   244                        ; For Partitioning, LBA will is used, as the BIOS only supports LBA addressing for the drive.
+   245                        ;
+   246                        ;**************************************************************************************************
+   247                        ;
+   248                        ;       .ORG    $10FE           ;Offset to boot records
+   249                        ;
+   250                        BOOT_RECORD                     ;Start of Boot records
+   251                        ;
+   252                        ;Partition Records start here:
+   253                        ; - The first 12 records are Expanded Partition Entries per Ontrack Disk Manager
+   254                        ; - The last 4 records are the standard Primary partition Entries
+   255                        ;
+   256                        Partition_0x04
+   257                        ;
+   258 00:10FE: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+   259 00:10FF: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   260 00:1102: DB                   .DB     $DB             ;CPM Partition identifier
+   261 00:1103: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   262 00:1106: 00 00 00 00          .LONG   $0              ;First LBA Block in partition
+   263 00:110A: 00 00 00 00          .LONG   $0              ;Number of Blocks in partition
+   264                        ;
+   265                        Partition_0x05
+   266                        ;
+   267 00:110E: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+   268 00:110F: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   269 00:1112: DB                   .DB     $DB             ;CPM Partition identifier
+   270 00:1113: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   271 00:1116: 00 00 00 00          .LONG   $0              ;First LBA Block in partition
+   272 00:111A: 00 00 00 00          .LONG   $0              ;Number of Blocks in partition
+   273                        ;
+   274                        Partition_0x06
+   275                        ;
+   276 00:111E: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+   277 00:111F: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   278 00:1122: DB                   .DB     $DB             ;CPM Partition identifier
+   279 00:1123: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   280 00:1126: 00 00 00 00          .LONG   $0              ;First LBA Block in partition
+   281 00:112A: 00 00 00 00          .LONG   $0              ;Number of Blocks in partition
+   282                        ;
+   283                        Partition_0x07
+   284                        ;
+   285 00:112E: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+   286 00:112F: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   287 00:1132: DB                   .DB     $DB             ;CPM Partition identifier
+   288 00:1133: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   289 00:1136: 00 00 00 00          .LONG   $0              ;First LBA Block in partition
+   290 00:113A: 00 00 00 00          .LONG   $0              ;Number of Blocks in partition
+   291                        ;
+   292                        Partition_0x08
+   293                        ;
+   294 00:113E: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+   295 00:113F: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+  Fri Apr 11 2025  6:42                                                                                                    Page 6
+
+
+   296 00:1142: DB                   .DB     $DB             ;CPM Partition identifier
+   297 00:1143: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   298 00:1146: 00 00 00 00          .LONG   $0              ;First LBA Block in partition
+   299 00:114A: 00 00 00 00          .LONG   $0              ;Number of Blocks in partition
+   300                        
+   301                        ;
+   302                        Partition_0x09
+   303                        ;
+   304 00:114E: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+   305 00:114F: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   306 00:1152: DB                   .DB     $DB             ;CPM Partition identifier
+   307 00:1153: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   308 00:1156: 00 00 00 00          .LONG   $0              ;First LBA Block in partition
+   309 00:115A: 00 00 00 00          .LONG   $0              ;Number of Blocks in partition
+   310                        ;
+   311                        Partition_0x0A
+   312                        ;
+   313 00:115E: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+   314 00:115F: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   315 00:1162: DB                   .DB     $DB             ;CPM Partition identifier
+   316 00:1163: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   317 00:1166: 00 00 00 00          .LONG   $0              ;First LBA Block in partition
+   318 00:116A: 00 00 00 00          .LONG   $0              ;Number of Blocks in partition
+   319                        ;
+   320                        Partition_0x0B
+   321                        ;
+   322 00:116E: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+   323 00:116F: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   324 00:1172: DB                   .DB     $DB             ;CPM Partition identifier
+   325 00:1173: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   326 00:1176: 00 00 00 00          .LONG   $0              ;First LBA Block in partition
+   327 00:117A: 00 00 00 00          .LONG   $0              ;Number of Blocks in partition
+   328                        ;
+   329                        Partition_0x0C
+   330                        ;
+   331 00:117E: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+   332 00:117F: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   333 00:1182: DB                   .DB     $DB             ;CPM Partition identifier
+   334 00:1183: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   335 00:1186: 00 00 00 00          .LONG   $0              ;First LBA Block in partition
+   336 00:118A: 00 00 00 00          .LONG   $0              ;Number of Blocks in partition
+   337                        ;
+   338                        Partition_0x0D
+   339                        ;
+   340 00:118E: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+   341 00:118F: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   342 00:1192: DB                   .DB     $DB             ;CPM Partition identifier
+   343 00:1193: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   344 00:1196: 00 00 00 00          .LONG   $0              ;First LBA Block in partition
+   345 00:119A: 00 00 00 00          .LONG   $0              ;Number of Blocks in partition
+   346                        ;
+   347                        Partition_0x0E
+   348                        ;
+   349 00:119E: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+   350 00:119F: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   351 00:11A2: DB                   .DB     $DB             ;CPM Partition identifier
+   352 00:11A3: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   353 00:11A6: 00 00 00 00          .LONG   $0              ;First LBA Block in partition
+   354 00:11AA: 00 00 00 00          .LONG   $0              ;Number of Blocks in partition
+   355                        ;
+   356                        Partition_0x0F
+   357                        ;
+   358 00:11AE: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+  Fri Apr 11 2025  6:42                                                                                                    Page 7
+
+
+   359 00:11AF: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   360 00:11B2: DB                   .DB     $DB             ;CPM Partition identifier
+   361 00:11B3: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   362 00:11B6: 00 00 00 00          .LONG   $0              ;First LBA Block in partition
+   363 00:11BA: 00 00 00 00          .LONG   $0              ;Number of Blocks in partition
+   364                        ;
+   365                        Partition_0x00
+   366                        ;
+   367 00:11BE: 80                   .DB     %10000000       ;Bit Mask for active partition bit 7 shows as active
+   368 00:11BF: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   369 00:11C2: DB                   .DB     $DB             ;CPM Partition identifier
+   370 00:11C3: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   371 00:11C6: 40 00 00 00          .LONG   64              ;First LBA Block in partition
+   372 00:11CA: 00 00 04 00          .LONG   262144          ;Number of Blocks in partition
+   373                        ;
+   374                        Partition_0x01
+   375                        ;
+   376 00:11CE: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+   377 00:11CF: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   378 00:11D2: DB                   .DB     $DB             ;CPM Partition identifier
+   379 00:11D3: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   380 00:11D6: 40 00 04 00          .LONG   262208          ;First LBA Block in partition
+   381 00:11DA: 00 00 04 00          .LONG   262144          ;Number of Blocks in partition
+   382                        ;
+   383                        Partition_0x02
+   384                        ;
+   385 00:11DE: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+   386 00:11DF: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   387 00:11E2: DB                   .DB     $DB             ;CPM Partition identifier
+   388 00:11E3: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   389 00:11E6: 40 00 08 00          .LONG   524352          ;First LBA Block in partition
+   390 00:11EA: 00 00 04 00          .LONG   262144          ;Number of Blocks in partition
+   391                        ;
+   392                        Partition_0x03
+   393                        ;
+   394 00:11EE: 00                   .DB     %00000000       ;Bit Mask for active partition bit 7 shows as active
+   395 00:11EF: 00 00 00             .DB     $00, $00, $00   ;First CHS Field - zeros as LBA mode is used
+   396 00:11F2: DB                   .DB     $DB             ;CPM Partition identifier
+   397 00:11F3: 00 00 00             .DB     $00, $00, $00   ;Last CHS Field - zeros as LBA mode is used
+   398 00:11F6: 40 00 0C 00          .LONG   786496          ;First LBA Block in partition
+   399 00:11FA: 00 00 04 00          .LONG   262144          ;Number of Blocks in partition
+   400                        ;
+   401                        ;**************************************************************************************************
+   402                        ; Partition Block ends with standard 2-byte signature to show valid record
+   403                        ;
+   404 00:11FE: 55 AA                .DW     $AA55           ;Signature bytes - mark as valid partition record
+   405                        ;
+   406                        ;**************************************************************************************************
+   407                                .END
+
+
+      Lines assembled: 906
+      Errors: 0

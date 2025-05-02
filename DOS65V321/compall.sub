@@ -1,0 +1,34 @@
+sd $1:
+sd $2:
+go 65322
+go 65325
+comp $1:c43c4-1.jpg $2:c43c4-1.jpg
+comp $1:c43c4-2.jpg $2:c43c4-2.jpg
+comp $1:c43c4-3.jpg $2:c43c4-3.jpg
+comp $1:c43c4-4.jpg $2:c43c4-4.jpg
+comp $1:c43c4-5.jpg $2:c43c4-5.jpg
+comp $1:c43c4-6.jpg $2:c43c4-6.jpg
+comp $1:c43c4-7.jpg $2:c43c4-7.jpg
+comp $1:c43c4-8.jpg $2:c43c4-8.jpg
+comp $1:c43c4-9.jpg $2:c43c4-9.jpg
+comp $1:c43c4-10.jpg $2:c43c4-10.jpg
+comp $1:c43c4-11.jpg $2:c43c4-11.jpg
+comp $1:c43c4-12.jpg $2:c43c4-12.jpg
+comp $1:c43c4-13.jpg $2:c43c4-13.jpg
+comp $1:c43c4-14.jpg $2:c43c4-14.jpg
+comp $1:c43c4-15.jpg $2:c43c4-15.jpg
+comp $1:c43c4-16.jpg $2:c43c4-16.jpg
+comp $1:c43c4-17.jpg $2:c43c4-17.jpg
+comp $1:c43c4-18.jpg $2:c43c4-18.jpg
+comp $1:c43c4-19.jpg $2:c43c4-19.jpg
+comp $1:c43c4-20.jpg $2:c43c4-20.jpg
+comp $1:c43c4-21.jpg $2:c43c4-21.jpg
+comp $1:c43c4-22.jpg $2:c43c4-22.jpg
+comp $1:c43c4-23.jpg $2:c43c4-23.jpg
+comp $1:c43c4-24.jpg $2:c43c4-24.jpg
+comp $1:c43c4-25.jpg $2:c43c4-25.jpg
+comp $1:c43c4-26.jpg $2:c43c4-26.jpg
+comp $1:c43c4-27.jpg $2:c43c4-27.jpg
+go 65328
+a:sd $2:
+go 65331
