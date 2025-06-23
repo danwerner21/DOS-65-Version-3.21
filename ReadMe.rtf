@@ -26,7 +26,7 @@ IBM/Hitachi Microdrive with 35-pin PATA interface
 
  Once loaded, the C02 Pocket prototype should boot and show the BIOS messages and detection of the RTC and IDE devices. It will default to the limited function Monitor. It will also read the first logical block from the IDE and scan it for a proper partition record, although this is not currently being used for a bootable system. It will show an error for an invalid Partition Record however, as none is loaded.
 
- Once you have a working machine, you can use the Monitor’s Xmodem-CRC loader, which is executed by a Ctrl-L from the Monitor prompt to load the MB Utility and the DOS/65 images into RAM. Each file is loaded separately using the Ctrl-L command. When these are loaded, the MD Util will load to $0800 and the DOS/65 image will load to $D000.
+ Once you have a working machine, you can use the Monitor’s Xmodem-CRC loader, which is executed by a Ctrl-L from the Monitor prompt to load the MD Utility and the DOS/65 images into RAM. Each file is loaded separately using the Ctrl-L command. When these are loaded, the MD Util will load to $0800 and the DOS/65 image will load to $D000.
 
  Once loaded, type: g 800 <enter> which will launch the MD Util program.
 
